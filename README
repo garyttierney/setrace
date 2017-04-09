@@ -1,0 +1,3 @@
+A kernel module which helps debugging where and why SELinux AVC checks happen.
+
+TODO: userspace application that communicates with the module via netlink socket
