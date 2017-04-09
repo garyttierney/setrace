@@ -26,7 +26,8 @@
  * @scontext [out] Address to store the context string in.
  * @scontext_len [out] Address to store the length of the context string in.
  */
-static int (*sid_to_context)(u32 sid, char **scontext, u32 *scontext_len);
+static int (*sid_to_context)(u32 sid, char **scontext,
+			     u32 *scontext_len) __ro_after_init;
 
 /**
  * A stub for @avc_has_perm that takes the the function arguments
