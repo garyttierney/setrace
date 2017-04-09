@@ -8,26 +8,6 @@
 
 #define SETRACE_MAX_STACK_FRAMES 16
 
-enum {
-	SETRACE_ATTR_UNSPEC,
-	SETRACE_ATTR_MSG,
-	SETRACE_ATTR_ID,
-	__SETRACE_ATTR_MAX
-};
-
-#define SETRACE_ATTR_MAX (__SETRACE_ATTR_MAX - 1)
-
-enum {
-	SETRACE_CMD_UNSPEC,
-	SETRACE_CMD_SUB,
-	SETRACE_CMD_UNSUB,
-	SETRACE_CMD_EVENT,
-	__SETRACE_CMD_MAX
-};
-
-#define SETRACE_CMD_MAX (__SETRACE_CMD_MAX - 1)
-
-
 /**
  * A trace record containing all information sent to userspace about an AVC
  * check.

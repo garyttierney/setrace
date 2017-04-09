@@ -1,5 +1,7 @@
 #include "setrace.h"
 
+#include <setrace/genl_family.h>
+
 /**
  * Netlink attribute policies for setrace attribute types.
  */
@@ -29,13 +31,13 @@ const struct genl_ops setrace_genl_ops[] = {
  * and userspace.
  */
 struct genl_family setrace_genl_family __ro_after_init = {
-	.name = "SETRACE",
-	.hdrsize = 0,
-	.version = 1,
+	.name = SETRACE_GENL_NAME,
+	.version = SETRACE_GENL_VERSION_NR,
+	.module = THIS_MODULE,
 	.maxattr = SETRACE_ATTR_MAX,
 	.ops = setrace_genl_ops,
 	.n_ops = ARRAY_SIZE(setrace_genl_ops),
-	.module = THIS_MODULE
+	.hdrsize = 0,
 };
 
 int setrace_genl_register(void)
