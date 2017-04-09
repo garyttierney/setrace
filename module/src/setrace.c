@@ -39,19 +39,6 @@ static int (*sid_to_context)(u32 sid, char **scontext,
  * @requested A bitmask of requested access vectors.
  */
 static int avc_has_perm_stub(u32 ssid, u32 tsid, u16 tclass, u32 requested,
-			     struct common_audit_data *data);
-
-/**
- * A jump probe to capture the arguments of the @avc_has_perm function. The
- * return code isn't captured since userspace can calculate that using
- * the SELinux fs.
- */
-static struct jprobe avc_check_probe = {.entry = avc_has_perm_stub,
-					.kp = {
-					    .symbol_name = AVC_CHECK_SYM_NAME,
-					} };
-
-static int avc_has_perm_stub(u32 ssid, u32 tsid, u16 tclass, u32 requested,
 			     struct common_audit_data *data)
 {
 	int err = 0;
@@ -116,6 +103,18 @@ out:
 	jprobe_return();
 	return 0;
 }
+
+/**
+* A jump probe to capture the arguments of the @avc_has_perm function. The
+* return code isn't captured since userspace can calculate that using
+* the SELinux fs.
+*/
+static struct jprobe avc_check_probe = {
+	.entry = avc_has_perm_stub,
+	.kp = {
+		.symbol_name = AVC_CHECK_SYM_NAME,
+	}
+};
 
 static int __init setrace_init(void)
 {
