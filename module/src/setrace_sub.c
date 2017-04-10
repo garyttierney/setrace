@@ -7,7 +7,7 @@
 struct setrace_subscriber {
 	struct list_head list;
 	struct rcu_head rcu;
-	pid_t subscriber_id;
+	u32 subscriber_id;
 	pid_t target_id;
 };
 
@@ -72,7 +72,7 @@ int setrace_notify(const struct setrace_record *record)
  * Subscribe a netlink socket opened by @subscriber_id to AVC check events on
  * @target_id.
  */
-int setrace_subscribe(pid_t subscriber_id, pid_t target_id)
+int setrace_subscribe(u32 subscriber_id, pid_t target_id)
 {
 	struct setrace_subscriber *sub = kmalloc(sizeof(*sub), GFP_KERNEL);
 	if (sub == NULL) {
@@ -86,7 +86,7 @@ int setrace_subscribe(pid_t subscriber_id, pid_t target_id)
 	return 0;
 }
 
-void setrace_unsubscribe(pid_t subscriber_id, pid_t target_id)
+void setrace_unsubscribe(u32 subscriber_id, pid_t target_id)
 {
 	struct setrace_subscriber *sub;
 

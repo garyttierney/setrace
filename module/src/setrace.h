@@ -59,7 +59,7 @@ int setrace_genl_cmd_unsub(struct sk_buff *skb, struct genl_info *info);
 /**
  * Send a message event to the netlink client with a port id of @subscriber_id.
  */
-int setrace_genl_send_msg(pid_t subscriber_id, const char *msg);
+int setrace_genl_send_msg(u32 subscriber_id, const char *msg);
 
 /**
  * Register the setrace generic netlink socket family.
@@ -93,7 +93,7 @@ int setrace_notify(const struct setrace_record *trace_record);
  * @subscriber_id The port id of the subscribers netlink socket.
  * @target_id The pid of the target process.
  */
-int setrace_subscribe(pid_t subscriber_id, pid_t target_id);
+int setrace_subscribe(u32 subscriber_id, pid_t target_id);
 
 /**
  * Unregister @subscriber_id as a subscriber from AVC checks on @target_id.
@@ -101,7 +101,7 @@ int setrace_subscribe(pid_t subscriber_id, pid_t target_id);
  * @subscriber_id The port id of the subscribers netlink socket.
  * @target_id The pid of the process that was subscribed to.
  */
-void setrace_unsubscribe(pid_t subscriber_id, pid_t target_id);
+void setrace_unsubscribe(u32 subscriber_id, pid_t target_id);
 
 /**
  * Unsubscribe all AVC trace subscribers.

@@ -63,7 +63,7 @@ int setrace_genl_cmd_sub(struct sk_buff *skb, struct genl_info *info)
 	int rc = 0;
 
 	pid_t target_id;
-	pid_t subscriber_id = info->snd_portid;
+	u32 subscriber_id = info->snd_portid;
 	struct nlattr *attr = info->attrs[SETRACE_ATTR_ID];
 
 	if (!attr) {
@@ -72,6 +72,8 @@ int setrace_genl_cmd_sub(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	target_id = (pid_t) nla_get_u64(attr);
+	pr_info_ratelimited("Received request from userspace (subscriber_id=%d) to begin tracing pid %d\n",
+			    subscriber_id, target_id);
 
 	if (setrace_subscribe(subscriber_id, target_id) < 0) {
 		rc = -1;
@@ -86,7 +88,7 @@ int setrace_genl_cmd_unsub(struct sk_buff *skb, struct genl_info *info)
 	int rc = 0;
 
 	pid_t target_id;
-	pid_t subscriber_id = info->snd_portid;
+	u32 subscriber_id = info->snd_portid;
 	struct nlattr *attr = info->attrs[SETRACE_ATTR_ID];
 
 	if (!attr) {
@@ -100,7 +102,7 @@ out:
 	return rc;
 }
 
-int setrace_genl_send_msg(pid_t subscriber_id, const char *msg)
+int setrace_genl_send_msg(u32 subscriber_id, const char *msg)
 {
 	static unsigned int notify_event_seq;
 
