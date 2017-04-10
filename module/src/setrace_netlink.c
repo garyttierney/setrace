@@ -72,7 +72,7 @@ int setrace_genl_cmd_sub(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	target_id = (pid_t) nla_get_u64(attr);
-	pr_info_ratelimited("Received request from userspace (subscriber_id=%d) to begin tracing pid %d\n",
+	pr_info_ratelimited("setrace: received request from userspace (subscriber_id=%d) to begin tracing pid %d\n",
 			    subscriber_id, target_id);
 
 	if (setrace_subscribe(subscriber_id, target_id) < 0) {
@@ -104,7 +104,7 @@ out:
 
 int setrace_genl_send_msg(u32 subscriber_id, const char *msg)
 {
-	static unsigned int notify_event_seq;
+	static u32 notify_event_seq = 0;
 
 	int ret = 0;
 
@@ -130,12 +130,8 @@ int setrace_genl_send_msg(u32 subscriber_id, const char *msg)
 	}
 
 	genlmsg_end(skb, msg_header);
-	ret = genlmsg_unicast(&init_net, skb, subscriber_id);
-	if (ret != 0) {
-		goto err;
-	}
 
-	return ret;
+	return genlmsg_unicast(&init_net, skb, subscriber_id);
 err:
 	kfree(skb);
 	kfree(msg_header);

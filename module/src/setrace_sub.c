@@ -59,6 +59,8 @@ int setrace_notify(const struct setrace_record *record)
 		if (sub->target_id == record->pid) {
 			ret = setrace_genl_send_msg(sub->subscriber_id, "test");
 			if (ret < 0) {
+				setrace_unsubscribe(sub->subscriber_id,
+						    SETRACE_UNSUBSCRIBE_ALL);
 				break;
 			}
 		}
@@ -92,10 +94,19 @@ void setrace_unsubscribe(u32 subscriber_id, pid_t target_id)
 
 	list_for_each_entry(sub, &subscribers_head, list) {
 		if (sub->subscriber_id == subscriber_id &&
-		    sub->target_id == target_id) {
+		    (sub->target_id == target_id ||
+		     target_id == SETRACE_UNSUBSCRIBE_ALL)) {
 			list_del_rcu(&sub->list);
 			call_rcu(&sub->rcu, setrace_subscriber_rcu_reclaim);
 		}
+	}
+
+	if (target_id == SETRACE_UNSUBSCRIBE_ALL) {
+		pr_info_ratelimited("setrace: unsubscribed %d from all processes\n",
+				    subscriber_id);
+	} else {
+		pr_info_ratelimited("setrace: unsubscribed %d from %d\n",
+				    subscriber_id, target_id);
 	}
 }
 

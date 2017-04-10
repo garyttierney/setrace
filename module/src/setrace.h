@@ -7,6 +7,7 @@
 #include <net/genetlink.h>
 
 #define SETRACE_MAX_STACK_FRAMES 16
+#define SETRACE_UNSUBSCRIBE_ALL 0
 
 /**
  * A trace record containing all information sent to userspace about an AVC
