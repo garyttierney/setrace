@@ -29,22 +29,30 @@
  * @userspace_stacktrace_size The number of frames which could be saved to
  * create a userspace stacktrace.
  */
-struct setrace_record {
-	pid_t pid;
+struct setrace_avc_check {
+	u32 pid;
 
+	u32 ssid;
 	char *scontext;
 	u32 scontext_len;
 
+	u32 tsid;
 	char *tcontext;
 	u32 tcontext_len;
 
-	u16 tclass;
-	u32 tperms;
+	u16 security_class;
+	u32 permissions;
 
 	unsigned long kernel_stacktrace[SETRACE_MAX_STACK_FRAMES];
-	unsigned int kernel_stacktrace_size;
+	u8 kernel_stacktrace_size;
 	unsigned long userspace_stacktrace[SETRACE_MAX_STACK_FRAMES];
-	unsigned int userspace_stacktrace_size;
+	u8 userspace_stacktrace_size;
+};
+
+enum {
+	SETRACE_SUB_PID = 0,
+	SETRACE_SUB_SCONTEXT,
+	SETRACE_SUB_TCONTEXT
 };
 
 /**
@@ -60,7 +68,7 @@ int setrace_genl_cmd_unsub(struct sk_buff *skb, struct genl_info *info);
 /**
  * Send a message event to the netlink client with a port id of @subscriber_id.
  */
-int setrace_genl_send_msg(u32 subscriber_id, const char *msg);
+int setrace_genl_send_record(u32 subscriber_id, const struct setrace_avc_check *check);
 
 /**
  * Register the setrace generic netlink socket family.
@@ -73,11 +81,13 @@ int setrace_genl_register(void);
 void setrace_genl_unregister(void);
 
 /**
- * Check if any subscriber is subscribed to AVC checks on @target_id.
+ * Check if any subscriber is subscribed to AVC events with the given parameters.
  *
- * @target_id The pid of the target to check.
+ * @pid The pid of the task the AVC event was created for.
+ * @ssid The source security identifier of the AVC check.
+ * @tsid The target security identifier of the AVC check.
  */
-int setrace_is_subscribed_to(pid_t target_id);
+int setrace_is_subscribed_to(pid_t pid, u32 ssid, u32 tsid);
 
 /**
  * Notifies subscribers of a trace record by sending netlink sockets containing
@@ -86,15 +96,22 @@ int setrace_is_subscribed_to(pid_t target_id);
  * @subscriber_id The port id of the subscribers netlink socket.
  * @trace_record The trace record to send as a message.
  */
-int setrace_notify(const struct setrace_record *trace_record);
+int setrace_notify(const struct setrace_avc_check *trace_record);
 
 /**
  * Register @subscriber_id as a subscriber to AVC checks on @target_id.
  *
  * @subscriber_id The port id of the subscribers netlink socket.
- * @target_id The pid of the target process.
+ * @pid The pid of the target process.
  */
-int setrace_subscribe(u32 subscriber_id, pid_t target_id);
+int setrace_subscribe_to_pid(u32 subscriber_id, pid_t pid);
+
+/**
+ * Register @subscriber_id as a subscriber to AVC checks with a source or
+ * target context of @context, depending on @type.
+ */
+int setrace_subscribe_to_context(u32 subscriber_id, int type,
+				 const char *context);
 
 /**
  * Unregister @subscriber_id as a subscriber from AVC checks on @target_id.

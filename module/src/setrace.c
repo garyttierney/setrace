@@ -5,6 +5,7 @@
  * Author: Gary Tierney <gary.tierney@gmx.com>
  */
 #include "setrace.h"
+#include "setrace_sel.h"
 
 #include <linux/init.h>
 #include <linux/kallsyms.h>
@@ -17,6 +18,13 @@
 
 #define AVC_CHECK_SYM_NAME "avc_has_perm"
 #define SID_TO_CONTEXT_SYM_NAME "security_sid_to_context"
+#define CONTEXT_TO_SID_SYM_NAME "security_context_to_sid"
+#define SAVE_USER_STACKTRACE_SYM_NAME "save_stack_trace_user"
+
+struct kallsyms_entry {
+	const char *sym_name;
+	void **function;
+};
 
 /**
  * A pointer to the 'security_sid_to_context' symbol, to map
@@ -26,8 +34,28 @@
  * @scontext [out] Address to store the context string in.
  * @scontext_len [out] Address to store the length of the context string in.
  */
-static int (*sid_to_context)(u32 sid, char **scontext,
+int (*sel_sid_to_context)(u32 sid, char **scontext,
 			     u32 *scontext_len) __ro_after_init;
+
+int (*sel_context_to_sid)(const char *context, u32 context_len, u32 *sid,
+				 gfp_t gfpflags) __ro_after_init;
+
+static int (*my_save_stack_trace_user)(struct stack_trace *trace) __ro_after_init;
+
+static const struct kallsyms_entry kallsyms_entries[] = {
+	{
+		.sym_name = SID_TO_CONTEXT_SYM_NAME,
+		.function = (void **) &sel_sid_to_context
+	},
+	{
+		.sym_name = CONTEXT_TO_SID_SYM_NAME,
+		.function = (void **) &sel_context_to_sid
+	},
+	{
+		.sym_name = SAVE_USER_STACKTRACE_SYM_NAME,
+		.function = (void**) &my_save_stack_trace_user
+	}
+};
 
 /**
  * A stub for @avc_has_perm that takes the the function arguments
@@ -43,14 +71,14 @@ static int avc_has_perm_stub(u32 ssid, u32 tsid, u16 tclass, u32 requested,
 {
 	int err = 0;
 
-	struct setrace_record record;
+	struct setrace_avc_check record;
 	struct stack_trace kernel_stacktrace = {
 		.nr_entries = 0,
 		.entries = &record.kernel_stacktrace[0],
 		.max_entries = SETRACE_MAX_STACK_FRAMES,
 		.skip = 0
 	};
-	
+
 	struct stack_trace userspace_stacktrace = {
 		.nr_entries = 0,
 		.entries = &record.userspace_stacktrace[0],
@@ -64,33 +92,36 @@ static int avc_has_perm_stub(u32 ssid, u32 tsid, u16 tclass, u32 requested,
 
 	pid_t task_pid = task_pid_nr(current);
 
-	if (!setrace_is_subscribed_to(task_pid)) {
+	if (!setrace_is_subscribed_to(task_pid, ssid, tsid)) {
 		jprobe_return();
 		return 0;
 	}
 
-	err = sid_to_context(ssid, &scontext, &scontext_len);
+	err = sel_sid_to_context(ssid, &scontext, &scontext_len);
 	if (err < 0) {
 		goto out;
 	}
 
-	err = sid_to_context(tsid, &tcontext, &tcontext_len);
+	err = sel_sid_to_context(tsid, &tcontext, &tcontext_len);
 	if (err < 0) {
 		goto out;
 	}
 
 	save_stack_trace(&kernel_stacktrace);
-	if (IS_ENABLED(CONFIG_USERSPACE_STACKTRACE_SUPPORT)) {
-		save_stack_trace_user(&userspace_stacktrace);
-	}
+
+	preempt_disable();
+	my_save_stack_trace_user(&userspace_stacktrace);
+	preempt_enable();
 
 	record.pid = task_pid;
+	record.ssid = ssid;
 	record.scontext = scontext;
 	record.scontext_len = scontext_len;
+	record.tsid = tsid;
 	record.tcontext = tcontext;
 	record.tcontext_len = tcontext_len;
-	record.tclass = tclass;
-	record.tperms = requested;
+	record.security_class = tclass;
+	record.permissions = requested;
 	record.kernel_stacktrace_size = kernel_stacktrace.nr_entries;
 	record.userspace_stacktrace_size = userspace_stacktrace.nr_entries;
 
@@ -119,17 +150,21 @@ static struct jprobe avc_check_probe = {
 static int __init setrace_init(void)
 {
 	int err = 0;
+	unsigned int i = 0;
+	unsigned long addr;
 
-	unsigned long sid_to_context_addr =
-	    kallsyms_lookup_name(SID_TO_CONTEXT_SYM_NAME);
+	for (; i < ARRAY_SIZE(kallsyms_entries); i++) {
+		const char *name = kallsyms_entries[i].sym_name;
+		void **ptr = kallsyms_entries[i].function;
 
-	if (sid_to_context_addr == 0) {
-		pr_info("Failed to lookup address of %s\n",
-			SID_TO_CONTEXT_SYM_NAME);
-		return -1;
+		addr = kallsyms_lookup_name(name);
+		if (addr == 0) {
+			pr_info("Failed to lookup address of %s\n", name);
+			return -1;
+		}
+
+		*ptr = (void *) addr;
 	}
-
-	sid_to_context = (void *)sid_to_context_addr;
 
 	err = register_jprobe(&avc_check_probe);
 	if (err < 0) {

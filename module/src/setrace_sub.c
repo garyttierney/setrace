@@ -1,4 +1,5 @@
 #include "setrace.h"
+#include "setrace_sel.h"
 
 /**
  * A list of processes (or generic netlink 'portids') which have subscribed
@@ -7,8 +8,14 @@
 struct setrace_subscriber {
 	struct list_head list;
 	struct rcu_head rcu;
+
+	int type;
 	u32 subscriber_id;
-	pid_t target_id;
+
+	union {
+		pid_t pid;
+		u32 sid;
+	};
 };
 
 /**
@@ -27,14 +34,31 @@ static void setrace_subscriber_rcu_reclaim(struct rcu_head *rp)
 	kfree(sub);
 }
 
-int setrace_is_subscribed_to(pid_t target_id)
+static int setrace_subscriber_listening(const struct setrace_subscriber *sub,
+		pid_t pid, u32 ssid, u32 tsid)
+{
+	switch (sub->type) {
+		case SETRACE_SUB_SCONTEXT:
+			return sub->sid == ssid;
+		case SETRACE_SUB_TCONTEXT:
+			return sub->sid == tsid;
+		case SETRACE_SUB_PID:
+			return sub->pid == pid;
+		default:
+			BUG();
+	}
+	
+	return 0;
+}
+
+int setrace_is_subscribed_to(pid_t pid, u32 ssid, u32 tsid)
 {
 	struct setrace_subscriber *sub;
 	int subscribed_to = 0;
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(sub, &subscribers_head, list) {
-		if (sub->target_id == target_id) {
+		if (setrace_subscriber_listening(sub, pid, ssid, tsid)) {
 			subscribed_to = 1;
 			break;
 		}
@@ -49,18 +73,24 @@ int setrace_is_subscribed_to(pid_t target_id)
  *
  * @record The trace record to notify clients of.
  */
-int setrace_notify(const struct setrace_record *record)
+int setrace_notify(const struct setrace_avc_check *avc)
 {
 	int ret = 0;
 	struct setrace_subscriber *sub;
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(sub, &subscribers_head, list) {
-		if (sub->target_id == record->pid) {
-			ret = setrace_genl_send_msg(sub->subscriber_id, "test");
-			if (ret < 0) {
+		if (setrace_subscriber_listening(sub, avc->pid, avc->ssid,
+						 avc->tsid)) {
+			ret = setrace_genl_send_record(sub->subscriber_id, avc);
+			if (ret == -ECONNREFUSED) {
+				// Unsubscribe any ports which refused
+				// a connection when trying to send
+				// a message
 				setrace_unsubscribe(sub->subscriber_id,
 						    SETRACE_UNSUBSCRIBE_ALL);
+				continue;
+			} else if (ret < 0) {
 				break;
 			}
 		}
@@ -74,7 +104,7 @@ int setrace_notify(const struct setrace_record *record)
  * Subscribe a netlink socket opened by @subscriber_id to AVC check events on
  * @target_id.
  */
-int setrace_subscribe(u32 subscriber_id, pid_t target_id)
+int setrace_subscribe_to_pid(u32 subscriber_id, pid_t pid)
 {
 	struct setrace_subscriber *sub = kmalloc(sizeof(*sub), GFP_KERNEL);
 	if (sub == NULL) {
@@ -82,7 +112,36 @@ int setrace_subscribe(u32 subscriber_id, pid_t target_id)
 	}
 
 	sub->subscriber_id = subscriber_id;
-	sub->target_id = target_id;
+	sub->type = SETRACE_SUB_PID;
+	sub->pid = pid;
+	list_add_rcu(&sub->list, &subscribers_head);
+
+	return 0;
+}
+
+int setrace_subscribe_to_context(u32 subscriber_id, int type,
+				 const char *context)
+{
+	u32 sid;
+	struct setrace_subscriber *sub;
+
+	if (type != SETRACE_SUB_SCONTEXT && type != SETRACE_SUB_TCONTEXT) {
+		return -1;
+	}
+
+	if (sel_context_to_sid(context, strlen(context), &sid,
+			       GFP_KERNEL) < 0) {
+		return -1;
+	}
+
+	sub = kmalloc(sizeof(*sub), GFP_KERNEL);
+	if (sub == NULL) {
+		return -ENOMEM;
+	}
+
+	sub->subscriber_id = subscriber_id;
+	sub->type = type;
+	sub->sid = sid;
 	list_add_rcu(&sub->list, &subscribers_head);
 
 	return 0;
@@ -94,7 +153,7 @@ void setrace_unsubscribe(u32 subscriber_id, pid_t target_id)
 
 	list_for_each_entry(sub, &subscribers_head, list) {
 		if (sub->subscriber_id == subscriber_id &&
-		    (sub->target_id == target_id ||
+		    (/*sub->target_id == target_id ||*/
 		     target_id == SETRACE_UNSUBSCRIBE_ALL)) {
 			list_del_rcu(&sub->list);
 			call_rcu(&sub->rcu, setrace_subscriber_rcu_reclaim);
